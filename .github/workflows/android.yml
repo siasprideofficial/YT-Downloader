@@ -7,32 +7,46 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # Stable Ubuntu environment
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4  # v3 se v4 kiya gaya hai
+        uses: actions/checkout@v4
 
-      - name: Get Date
-        id: get-date
+      # Java Environment Setup (Buildozer/Android SDK ke liye zaroori hai)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Python Setup
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # System Dependencies Install karna
+      - name: Install Ubuntu Dependencies
         run: |
-          echo "date=$(date -u '+%Y%m%d')" >> $GITHUB_OUTPUT
-        shell: bash
+          sudo apt update
+          sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libssl-dev libffi-dev maven clang lldb lld
 
-      - name: Cache Buildozer
-        uses: actions/cache@v4  # v3 se v4 kiya gaya hai
-        with:
-          path: .buildozer
-          key: ${{ runner.os }}-buildozer-${{ steps.get-date.outputs.date }}
+      # Buildozer aur Cython Install karna
+      - name: Install Buildozer and Cython
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython==0.29.33
 
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          command: buildozer android debug
-          buildozer_version: stable
+      # Buildozer se Android APK build karna
+      - name: Build APK with Buildozer
+        run: |
+          # 'yes' command automatic licenses accept karne ke liye hai
+          yes | buildozer android debug
 
+      # APK File ko GitHub Artifacts par upload karna (v4 ka use kiya hai)
       - name: Upload APK
-        uses: actions/upload-artifact@v4  # v3 se v4 kiya gaya hai (is se error theek ho jayegi)
+        uses: actions/upload-artifact@v4
         with:
           name: python-downloader-apk
           path: bin/*.apk
