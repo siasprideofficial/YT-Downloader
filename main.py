@@ -1,5 +1,7 @@
 import os
 import sys
+import shutil
+import stat
 import threading
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -14,7 +16,7 @@ from kivy.core.clipboard import Clipboard
 from kivy.utils import platform
 from kivy.clock import mainthread
 
-# Console bypass stream
+# Console bypass stream (Crash se bachane ke liye)
 class SafeStream:
     def write(self, data): pass
     def flush(self): pass
@@ -29,10 +31,12 @@ class DownloaderApp(App):
     def build(self):
         self.title = "YT-DLP Downloader Pro"
         
-        # 1. Root ScrollView
+        # FFmpeg Binary Setup
+        self.ffmpeg_path = self.setup_ffmpeg()
+        
+        # Root ScrollView (Responsive Layout)
         root_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         
-        # 2. Main Content Layout
         content_layout = BoxLayout(
             orientation='vertical', 
             spacing=15, 
@@ -55,7 +59,7 @@ class DownloaderApp(App):
         self.label.bind(size=self.label.setter('text_size'))
         content_layout.add_widget(self.label)
         
-        # Thumbnail Preview
+        # Thumbnail Preview (Invisible by default, height=0)
         self.thumbnail = AsyncImage(
             source="",
             size_hint_y=None,
@@ -64,7 +68,7 @@ class DownloaderApp(App):
         )
         content_layout.add_widget(self.thumbnail)
         
-        # URL Input Row (Icons replaced with Clean Text to avoid [] boxes)
+        # URL Input Row (Input + Clear + Paste)
         url_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=55, spacing=5)
         
         self.url_input = TextInput(
@@ -100,15 +104,14 @@ class DownloaderApp(App):
         )
         paste_btn.bind(on_press=self.paste_from_clipboard)
         url_row.add_widget(paste_btn)
-        
         content_layout.add_widget(url_row)
         
-        # Settings Row
+        # Settings Row (Dropdown Quality with 4K + Subtitle Checkbox)
         settings_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=10)
         
         self.quality_spinner = Spinner(
             text='Select Quality (720p)',
-            values=('1080p (Best)', '720p (HD)', '480p (SD)', 'Audio Only (M4A)'),
+            values=('4K (Ultra HD)', '1080p (Full HD)', '720p (HD)', '480p (SD)', 'Audio Only (M4A)'),
             size_hint_x=0.5,
             background_normal='',
             background_color=(0.2, 0.2, 0.2, 1)
@@ -120,11 +123,9 @@ class DownloaderApp(App):
         self.sub_checkbox = CheckBox(size_hint_x=0.2)
         sub_label = Label(text="Subtitles (.srt)", font_size='14sp', halign="left", size_hint_x=0.8)
         sub_label.bind(size=sub_label.setter('text_size'))
-        
         sub_layout.add_widget(self.sub_checkbox)
         sub_layout.add_widget(sub_label)
         settings_row.add_widget(sub_layout)
-        
         content_layout.add_widget(settings_row)
         
         # Fetch Details Button
@@ -153,7 +154,7 @@ class DownloaderApp(App):
         self.download_btn.bind(on_press=self.start_download_thread)
         content_layout.add_widget(self.download_btn)
         
-        # Open Folder Button
+        # Open Downloads Folder Button
         self.open_folder_btn = Button(
             text="OPEN DOWNLOADS FOLDER",
             size_hint_y=None,
@@ -165,7 +166,7 @@ class DownloaderApp(App):
         self.open_folder_btn.bind(on_press=self.open_downloads_folder)
         content_layout.add_widget(self.open_folder_btn)
         
-        # Status Label (Height increased to 120 so long errors wrap and display fully)
+        # Status Label
         self.status_label = Label(
             text="Status: Ready", 
             size_hint_y=None, 
@@ -181,6 +182,26 @@ class DownloaderApp(App):
         root_scroll.add_widget(content_layout)
         
         return root_scroll
+
+    # FFmpeg extract aur chmod permissions setup karne ka function
+    def setup_ffmpeg(self):
+        if platform == 'android':
+            internal_dir = self.user_data_dir
+            dest_path = os.path.join(internal_dir, 'ffmpeg')
+            
+            # Agar file local space mein nahi hai, to copy karein
+            if not os.path.exists(dest_path):
+                src_path = os.path.join(os.path.dirname(__file__), 'ffmpeg.so')
+                if os.path.exists(src_path):
+                    try:
+                        shutil.copy(src_path, dest_path)
+                        # Executable read/write/execute permissions dena (+x)
+                        os.chmod(dest_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                    except Exception as e:
+                        print(f"FFmpeg copy error: {e}")
+            return dest_path
+        else:
+            return None
 
     @mainthread
     def update_status(self, text):
@@ -247,7 +268,7 @@ class DownloaderApp(App):
             eta = d.get('_eta_str', 'N/A').strip()
             self.update_status(f"Progress: {percent}\nSpeed: {speed} | ETA: {eta}")
         elif d['status'] == 'finished':
-            self.update_status("Status: Saving video...")
+            self.update_status("Status: Merging Audio/Video with FFmpeg (Please wait)...")
 
     def start_download_thread(self, instance):
         url = self.url_input.text.strip()
@@ -283,20 +304,30 @@ class DownloaderApp(App):
                 'progress_hooks': [self.progress_hook]
             }
 
-            # Pre-merged format selection logic (Eliminates FFmpeg requirements)
+            # Agar FFmpeg binary path valid hai, to inject karein
+            if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
+                ydl_opts['ffmpeg_location'] = self.ffmpeg_path
+
+            # Format options with dynamic split/merge configurations
             q_choice = self.quality_spinner.text
-            if "1080p" in q_choice:
-                # Downloads best single file (usually 720p pre-merged)
-                ydl_opts['format'] = 'best[height<=1080]/best'
+            if "4K" in q_choice:
+                ydl_opts['format'] = 'bestvideo[height<=2160]+bestaudio/best[height<=2160]'
+            elif "1080p" in q_choice:
+                ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'
             elif "480p" in q_choice:
-                # Downloads best single file <= 480p (typically 360p pre-merged)
-                ydl_opts['format'] = 'best[height<=480]/best'
+                if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
+                    ydl_opts['format'] = 'bestvideo[height<=480]+bestaudio/best[height<=480]'
+                else:
+                    ydl_opts['format'] = 'best[height<=480]/best'
             elif "Audio Only" in q_choice:
-                # Downloads best single audio file (m4a/webm - no merging needed)
-                ydl_opts['format'] = 'bestaudio/best'
+                # Direct M4A native audio
+                ydl_opts['format'] = 'bestaudio[ext=m4a]'
             else:
-                # Default 720p (best pre-merged single file)
-                ydl_opts['format'] = 'best[height<=720]/best'
+                # Default 720p HD (Automatic fallback based on FFmpeg availability)
+                if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
+                    ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]'
+                else:
+                    ydl_opts['format'] = 'best[height<=720]/best'
 
             if self.sub_checkbox.active:
                 ydl_opts['writesubtitles'] = True
