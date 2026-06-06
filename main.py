@@ -16,12 +16,10 @@ from kivy.core.clipboard import Clipboard
 from kivy.utils import platform
 from kivy.clock import mainthread
 
-# Console bypass stream (Crash se bachane ke liye)
 class SafeStream:
     def write(self, data): pass
     def flush(self): pass
 
-# Dummy logger
 class MyLogger:
     def debug(self, msg): pass
     def warning(self, msg): pass
@@ -31,10 +29,9 @@ class DownloaderApp(App):
     def build(self):
         self.title = "YT-DLP Downloader Pro"
         
-        # FFmpeg Binary Setup
+        # FFmpeg Setup (Looks for ffmpeg.bin instead of ffmpeg.so)
         self.ffmpeg_path = self.setup_ffmpeg()
         
-        # Root ScrollView (Responsive Layout)
         root_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         
         content_layout = BoxLayout(
@@ -59,7 +56,7 @@ class DownloaderApp(App):
         self.label.bind(size=self.label.setter('text_size'))
         content_layout.add_widget(self.label)
         
-        # Thumbnail Preview (Invisible by default, height=0)
+        # Thumbnail Preview
         self.thumbnail = AsyncImage(
             source="",
             size_hint_y=None,
@@ -68,7 +65,7 @@ class DownloaderApp(App):
         )
         content_layout.add_widget(self.thumbnail)
         
-        # URL Input Row (Input + Clear + Paste)
+        # URL Input Row
         url_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=55, spacing=5)
         
         self.url_input = TextInput(
@@ -106,7 +103,7 @@ class DownloaderApp(App):
         url_row.add_widget(paste_btn)
         content_layout.add_widget(url_row)
         
-        # Settings Row (Dropdown Quality with 4K + Subtitle Checkbox)
+        # Settings Row
         settings_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=10)
         
         self.quality_spinner = Spinner(
@@ -154,7 +151,7 @@ class DownloaderApp(App):
         self.download_btn.bind(on_press=self.start_download_thread)
         content_layout.add_widget(self.download_btn)
         
-        # Open Downloads Folder Button
+        # Open Folder Button
         self.open_folder_btn = Button(
             text="OPEN DOWNLOADS FOLDER",
             size_hint_y=None,
@@ -168,7 +165,7 @@ class DownloaderApp(App):
         
         # Status Label
         self.status_label = Label(
-            text="Status: Ready", 
+            text="Status: Checking System...", 
             size_hint_y=None, 
             height=120,
             font_size='13sp',
@@ -181,25 +178,33 @@ class DownloaderApp(App):
         
         root_scroll.add_widget(content_layout)
         
+        # Startup Checker: Agar FFmpeg successfully detect ho gaya to status badal jayega
+        if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
+            self.status_label.text = "Status: Ready (FFmpeg Active ✅)"
+        else:
+            self.status_label.text = "Status: Warning - FFmpeg NOT detected! ⚠️\n(1080p/4K downloads may fail)"
+        
         return root_scroll
 
-    # FFmpeg extract aur chmod permissions setup karne ka function
+    # Updated to look for ffmpeg.bin
     def setup_ffmpeg(self):
         if platform == 'android':
             internal_dir = self.user_data_dir
             dest_path = os.path.join(internal_dir, 'ffmpeg')
             
-            # Agar file local space mein nahi hai, to copy karein
-            if not os.path.exists(dest_path):
-                src_path = os.path.join(os.path.dirname(__file__), 'ffmpeg.so')
-                if os.path.exists(src_path):
-                    try:
-                        shutil.copy(src_path, dest_path)
-                        # Executable read/write/execute permissions dena (+x)
-                        os.chmod(dest_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-                    except Exception as e:
-                        print(f"FFmpeg copy error: {e}")
-            return dest_path
+            # Agar file already private space mein copied hai to direct return karein
+            if os.path.exists(dest_path):
+                return dest_path
+                
+            src_path = os.path.join(os.path.dirname(__file__), 'ffmpeg.bin')
+            if os.path.exists(src_path):
+                try:
+                    shutil.copy(src_path, dest_path)
+                    os.chmod(dest_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                    return dest_path
+                except Exception as e:
+                    print(f"FFmpeg copy error: {e}")
+            return None
         else:
             return None
 
@@ -226,7 +231,11 @@ class DownloaderApp(App):
     def clear_fields(self, instance):
         self.url_input.text = ""
         self.set_preview("YT-DLP Downloader Pro", "")
-        self.update_status("Status: Fields Cleared")
+        # Reset current status with diagnostic checks
+        if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
+            self.update_status("Status: Ready (FFmpeg Active ✅)")
+        else:
+            self.update_status("Status: Warning - FFmpeg NOT detected! ⚠️")
 
     def start_fetch_thread(self, instance):
         url = self.url_input.text.strip()
@@ -268,7 +277,7 @@ class DownloaderApp(App):
             eta = d.get('_eta_str', 'N/A').strip()
             self.update_status(f"Progress: {percent}\nSpeed: {speed} | ETA: {eta}")
         elif d['status'] == 'finished':
-            self.update_status("Status: Merging Audio/Video with FFmpeg (Please wait)...")
+            self.update_status("Status: Merging Audio/Video with FFmpeg...")
 
     def start_download_thread(self, instance):
         url = self.url_input.text.strip()
@@ -304,11 +313,10 @@ class DownloaderApp(App):
                 'progress_hooks': [self.progress_hook]
             }
 
-            # Agar FFmpeg binary path valid hai, to inject karein
             if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
                 ydl_opts['ffmpeg_location'] = self.ffmpeg_path
 
-            # Format options with dynamic split/merge configurations
+            # Format options with merge capabilities
             q_choice = self.quality_spinner.text
             if "4K" in q_choice:
                 ydl_opts['format'] = 'bestvideo[height<=2160]+bestaudio/best[height<=2160]'
@@ -320,10 +328,8 @@ class DownloaderApp(App):
                 else:
                     ydl_opts['format'] = 'best[height<=480]/best'
             elif "Audio Only" in q_choice:
-                # Direct M4A native audio
                 ydl_opts['format'] = 'bestaudio[ext=m4a]'
             else:
-                # Default 720p HD (Automatic fallback based on FFmpeg availability)
                 if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
                     ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]'
                 else:
