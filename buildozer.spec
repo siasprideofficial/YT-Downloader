@@ -40,12 +40,6 @@ android.api = 33
 # (int) Minimum API supported (Android 5.0+)
 android.minapi = 21
 
-# (int) Android SDK version to use
-android.sdk = 33
-
-# (str) Android NDK version to use
-android.ndk = 25.2.9519653
-
 # (bool) Private storage (keeps app internal files private)
 android.private_storage = True
 
