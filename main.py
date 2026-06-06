@@ -29,11 +29,10 @@ class DownloaderApp(App):
     def build(self):
         self.title = "YT-DLP Downloader Pro"
         
-        # 1. Root ScrollView (Jo scrolling handle karega)
+        # 1. Root ScrollView
         root_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         
-        # 2. Main Content Layout (BoxLayout supports minimum_height)
-        # Padding: [Left, Top, Right, Bottom] - isse UI screen ke beech mein professional dikhega
+        # 2. Main Content Layout
         content_layout = BoxLayout(
             orientation='vertical', 
             spacing=15, 
@@ -56,7 +55,7 @@ class DownloaderApp(App):
         self.label.bind(size=self.label.setter('text_size'))
         content_layout.add_widget(self.label)
         
-        # Thumbnail Preview (Invisible by default, height=0)
+        # Thumbnail Preview
         self.thumbnail = AsyncImage(
             source="",
             size_hint_y=None,
@@ -65,7 +64,7 @@ class DownloaderApp(App):
         )
         content_layout.add_widget(self.thumbnail)
         
-        # URL Input Row (Input + Clear + Paste)
+        # URL Input Row (Icons replaced with Clean Text to avoid [] boxes)
         url_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=55, spacing=5)
         
         self.url_input = TextInput(
@@ -80,19 +79,20 @@ class DownloaderApp(App):
         )
         url_row.add_widget(self.url_input)
         
-        # Clear Button (❌)
+        # Clear Button
         clear_btn = Button(
-            text="❌", 
+            text="Clear", 
             size_hint_x=0.2,
+            font_size='14sp',
             background_normal='',
             background_color=(0.25, 0.25, 0.25, 1)
         )
         clear_btn.bind(on_press=self.clear_fields)
         url_row.add_widget(clear_btn)
         
-        # Paste Button (📋)
+        # Paste Button
         paste_btn = Button(
-            text="📋 Paste", 
+            text="Paste", 
             size_hint_x=0.2,
             font_size='14sp',
             background_normal='',
@@ -103,7 +103,7 @@ class DownloaderApp(App):
         
         content_layout.add_widget(url_row)
         
-        # Settings Row (Dropdown Quality + Subtitle Checkbox)
+        # Settings Row
         settings_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=10)
         
         self.quality_spinner = Spinner(
@@ -155,7 +155,7 @@ class DownloaderApp(App):
         
         # Open Folder Button
         self.open_folder_btn = Button(
-            text="📂 OPEN DOWNLOADS FOLDER",
+            text="OPEN DOWNLOADS FOLDER",
             size_hint_y=None,
             height=50,
             font_size='14sp',
@@ -165,12 +165,12 @@ class DownloaderApp(App):
         self.open_folder_btn.bind(on_press=self.open_downloads_folder)
         content_layout.add_widget(self.open_folder_btn)
         
-        # Status Label
+        # Status Label (Height increased to 120 so long errors wrap and display fully)
         self.status_label = Label(
             text="Status: Ready", 
             size_hint_y=None, 
-            height=60,
-            font_size='14sp',
+            height=120,
+            font_size='13sp',
             halign="center",
             valign="middle",
             color=(0.7, 0.7, 0.7, 1)
@@ -178,7 +178,6 @@ class DownloaderApp(App):
         self.status_label.bind(size=self.status_label.setter('text_size'))
         content_layout.add_widget(self.status_label)
         
-        # Content layout ko ScrollView ke andar dala
         root_scroll.add_widget(content_layout)
         
         return root_scroll
@@ -284,15 +283,20 @@ class DownloaderApp(App):
                 'progress_hooks': [self.progress_hook]
             }
 
+            # Pre-merged format selection logic (Eliminates FFmpeg requirements)
             q_choice = self.quality_spinner.text
             if "1080p" in q_choice:
-                ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'
+                # Downloads best single file (usually 720p pre-merged)
+                ydl_opts['format'] = 'best[height<=1080]/best'
             elif "480p" in q_choice:
-                ydl_opts['format'] = 'bestvideo[height<=480]+bestaudio/best[height<=480]'
+                # Downloads best single file <= 480p (typically 360p pre-merged)
+                ydl_opts['format'] = 'best[height<=480]/best'
             elif "Audio Only" in q_choice:
+                # Downloads best single audio file (m4a/webm - no merging needed)
                 ydl_opts['format'] = 'bestaudio/best'
             else:
-                ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]'
+                # Default 720p (best pre-merged single file)
+                ydl_opts['format'] = 'best[height<=720]/best'
 
             if self.sub_checkbox.active:
                 ydl_opts['writesubtitles'] = True
