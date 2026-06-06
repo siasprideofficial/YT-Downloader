@@ -4,7 +4,6 @@ import threading
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.label import Label
@@ -30,22 +29,21 @@ class DownloaderApp(App):
     def build(self):
         self.title = "YT-DLP Downloader Pro"
         
-        # Main Root ScrollView taaki choti screen par bhi scroll ho sake
+        # 1. Root ScrollView (Jo scrolling handle karega)
         root_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         
-        # Centering container
-        anchor_layout = AnchorLayout(anchor_x='center', anchor_y='center', size_hint_y=None, padding=20)
-        anchor_layout.bind(minimum_height=anchor_layout.setter('height'))
-        
-        # Main content vertical stack
+        # 2. Main Content Layout (BoxLayout supports minimum_height)
+        # Padding: [Left, Top, Right, Bottom] - isse UI screen ke beech mein professional dikhega
         content_layout = BoxLayout(
             orientation='vertical', 
             spacing=15, 
-            size_hint=(0.95, None)
+            size_hint_x=1,
+            size_hint_y=None,
+            padding=[20, 30, 20, 30]
         )
         content_layout.bind(minimum_height=content_layout.setter('height'))
         
-        # 1. Title / Video Title Label
+        # Title Label
         self.label = Label(
             text="YT-DLP Downloader Pro", 
             font_size='20sp', 
@@ -58,7 +56,7 @@ class DownloaderApp(App):
         self.label.bind(size=self.label.setter('text_size'))
         content_layout.add_widget(self.label)
         
-        # 2. Thumbnail Preview (Shuruat mein height 0 hogi jab tak load na ho)
+        # Thumbnail Preview (Invisible by default, height=0)
         self.thumbnail = AsyncImage(
             source="",
             size_hint_y=None,
@@ -67,7 +65,7 @@ class DownloaderApp(App):
         )
         content_layout.add_widget(self.thumbnail)
         
-        # 3. URL Input Row (Horizontal: Text Box + Clear + Paste)
+        # URL Input Row (Input + Clear + Paste)
         url_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=55, spacing=5)
         
         self.url_input = TextInput(
@@ -82,7 +80,7 @@ class DownloaderApp(App):
         )
         url_row.add_widget(self.url_input)
         
-        # Clear Field Button (❌)
+        # Clear Button (❌)
         clear_btn = Button(
             text="❌", 
             size_hint_x=0.2,
@@ -92,7 +90,7 @@ class DownloaderApp(App):
         clear_btn.bind(on_press=self.clear_fields)
         url_row.add_widget(clear_btn)
         
-        # Auto-Paste Button (📋)
+        # Paste Button (📋)
         paste_btn = Button(
             text="📋 Paste", 
             size_hint_x=0.2,
@@ -105,10 +103,9 @@ class DownloaderApp(App):
         
         content_layout.add_widget(url_row)
         
-        # 4. Settings Row (Dropdown Quality + Subtitle Checkbox)
+        # Settings Row (Dropdown Quality + Subtitle Checkbox)
         settings_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=10)
         
-        # Video Quality Spinner (Dropdown)
         self.quality_spinner = Spinner(
             text='Select Quality (720p)',
             values=('1080p (Best)', '720p (HD)', '480p (SD)', 'Audio Only (M4A)'),
@@ -118,7 +115,7 @@ class DownloaderApp(App):
         )
         settings_row.add_widget(self.quality_spinner)
         
-        # Subtitle Checkbox Row
+        # Subtitle Checkbox
         sub_layout = BoxLayout(orientation='horizontal', size_hint_x=0.5, spacing=5)
         self.sub_checkbox = CheckBox(size_hint_x=0.2)
         sub_label = Label(text="Subtitles (.srt)", font_size='14sp', halign="left", size_hint_x=0.8)
@@ -130,7 +127,7 @@ class DownloaderApp(App):
         
         content_layout.add_widget(settings_row)
         
-        # 5. Fetch Details Button (Jo title aur thumbnail load karega)
+        # Fetch Details Button
         self.fetch_btn = Button(
             text="LOAD VIDEO DETAILS",
             size_hint_y=None,
@@ -143,7 +140,7 @@ class DownloaderApp(App):
         self.fetch_btn.bind(on_press=self.start_fetch_thread)
         content_layout.add_widget(self.fetch_btn)
         
-        # 6. Action Button (Download)
+        # Download Button
         self.download_btn = Button(
             text="START DOWNLOAD", 
             size_hint_y=None, 
@@ -151,12 +148,12 @@ class DownloaderApp(App):
             font_size='16sp',
             bold=True,
             background_normal='',
-            background_color=(0.12, 0.8, 0.4, 1) # Green Button for download
+            background_color=(0.12, 0.8, 0.4, 1)
         )
         self.download_btn.bind(on_press=self.start_download_thread)
         content_layout.add_widget(self.download_btn)
         
-        # 7. Open Downloads Folder Button
+        # Open Folder Button
         self.open_folder_btn = Button(
             text="📂 OPEN DOWNLOADS FOLDER",
             size_hint_y=None,
@@ -168,9 +165,9 @@ class DownloaderApp(App):
         self.open_folder_btn.bind(on_press=self.open_downloads_folder)
         content_layout.add_widget(self.open_folder_btn)
         
-        # 8. Status Label
+        # Status Label
         self.status_label = Label(
-            text="Status: Ready to Download", 
+            text="Status: Ready", 
             size_hint_y=None, 
             height=60,
             font_size='14sp',
@@ -181,12 +178,11 @@ class DownloaderApp(App):
         self.status_label.bind(size=self.status_label.setter('text_size'))
         content_layout.add_widget(self.status_label)
         
-        anchor_layout.add_widget(content_layout)
-        root_scroll.add_widget(anchor_layout)
+        # Content layout ko ScrollView ke andar dala
+        root_scroll.add_widget(content_layout)
         
         return root_scroll
 
-    # UI updates threads se safe rakhne ke liye
     @mainthread
     def update_status(self, text):
         self.status_label.text = text
@@ -196,32 +192,31 @@ class DownloaderApp(App):
         self.label.text = title[:60] + "..." if len(title) > 60 else title
         if thumb_url:
             self.thumbnail.source = thumb_url
-            self.thumbnail.height = 180 # Thumbnail load hote hi box expand hoga
+            self.thumbnail.height = 180 
         else:
             self.thumbnail.height = 0
 
-    # Auto Paste function
     def paste_from_clipboard(self, instance):
-        self.url_input.text = Clipboard.paste()
-        self.update_status("Status: URL Pasted from clipboard")
+        try:
+            self.url_input.text = Clipboard.paste()
+            self.update_status("Status: URL Pasted")
+        except Exception as e:
+            self.update_status("Status: Clipboard access failed")
 
-    # Clear input fields
     def clear_fields(self, instance):
         self.url_input.text = ""
         self.set_preview("YT-DLP Downloader Pro", "")
         self.update_status("Status: Fields Cleared")
 
-    # Metadata / Thumbnail fetch thread triggers
     def start_fetch_thread(self, instance):
         url = self.url_input.text.strip()
         if not url:
             self.update_status("Status: Please paste a URL first")
             return
-        self.update_status("Status: Fetching video details...")
+        self.update_status("Status: Fetching details...")
         threading.Thread(target=self.fetch_details, args=(url,)).start()
 
     def fetch_details(self, url):
-        # Console silent
         original_stdout = sys.stdout
         original_stderr = sys.stderr
         sys.stdout = SafeStream()
@@ -239,14 +234,13 @@ class DownloaderApp(App):
                 title = info.get('title', 'Video Loaded')
                 thumbnail = info.get('thumbnail', '')
                 self.set_preview(title, thumbnail)
-                self.update_status("Status: Video details loaded. Ready to Download!")
+                self.update_status("Status: Details loaded. Ready to Download!")
         except Exception as e:
             self.update_status(f"Status: Failed to load details - {str(e)}")
         finally:
             sys.stdout = original_stdout
             sys.stderr = original_stderr
 
-    # Download hook for progress meter
     def progress_hook(self, d):
         if d['status'] == 'downloading':
             percent = d.get('_percent_str', '0.0%').strip()
@@ -254,12 +248,12 @@ class DownloaderApp(App):
             eta = d.get('_eta_str', 'N/A').strip()
             self.update_status(f"Progress: {percent}\nSpeed: {speed} | ETA: {eta}")
         elif d['status'] == 'finished':
-            self.update_status("Status: Processing / Saving video...")
+            self.update_status("Status: Saving video...")
 
     def start_download_thread(self, instance):
         url = self.url_input.text.strip()
         if not url:
-            self.update_status("Status: Please enter a valid URL")
+            self.update_status("Status: Please enter a URL")
             return
         self.update_status("Status: Connecting...")
         threading.Thread(target=self.download_video, args=(url,)).start()
@@ -290,23 +284,20 @@ class DownloaderApp(App):
                 'progress_hooks': [self.progress_hook]
             }
 
-            # 1. Format Selection from Spinner
             q_choice = self.quality_spinner.text
             if "1080p" in q_choice:
                 ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'
             elif "480p" in q_choice:
                 ydl_opts['format'] = 'bestvideo[height<=480]+bestaudio/best[height<=480]'
             elif "Audio Only" in q_choice:
-                ydl_opts['format'] = 'bestaudio/best' # Downloads native high-quality audio
+                ydl_opts['format'] = 'bestaudio/best'
             else:
-                # Default 720p HD
                 ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]'
 
-            # 2. Subtitle Checkbox settings
             if self.sub_checkbox.active:
                 ydl_opts['writesubtitles'] = True
-                ydl_opts['writeautomaticsub'] = True # Fallback auto captions
-                ydl_opts['subtitleslangs'] = ['en', 'hi'] # English aur Hindi languages
+                ydl_opts['writeautomaticsub'] = True
+                ydl_opts['subtitleslangs'] = ['en', 'hi']
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
@@ -318,7 +309,6 @@ class DownloaderApp(App):
             sys.stdout = original_stdout
             sys.stderr = original_stderr
 
-    # Open system downloads folder
     def open_downloads_folder(self, instance):
         if platform == 'android':
             try:
