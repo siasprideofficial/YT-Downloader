@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Isse aap manually bhi build trigger kar sakte hain
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,9 +11,8 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # v3 se v4 kiya gaya hai
 
-      # Buildozer cache setup karne se build speed badh jati hai
       - name: Get Date
         id: get-date
         run: |
@@ -21,21 +20,19 @@ jobs:
         shell: bash
 
       - name: Cache Buildozer
-        uses: actions/cache@v3
+        uses: actions/cache@v4  # v3 se v4 kiya gaya hai
         with:
           path: .buildozer
           key: ${{ runner.os }}-buildozer-${{ steps.get-date.outputs.date }}
 
-      # Buildozer Action ka istemal karke APK build karna
       - name: Build with Buildozer
         uses: ArtemSBulgakov/buildozer-action@v1
         with:
           command: buildozer android debug
           buildozer_version: stable
 
-      # Generated APK ko artifacts mein upload karna taaki aap download kar sakein
       - name: Upload APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # v3 se v4 kiya gaya hai (is se error theek ho jayegi)
         with:
           name: python-downloader-apk
           path: bin/*.apk
