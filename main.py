@@ -3,6 +3,7 @@ import sys
 import shutil
 import stat
 import threading
+import subprocess # Test execution ke liye
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.scrollview import ScrollView
@@ -16,10 +17,12 @@ from kivy.core.clipboard import Clipboard
 from kivy.utils import platform
 from kivy.clock import mainthread
 
+# Console bypass stream
 class SafeStream:
     def write(self, data): pass
     def flush(self): pass
 
+# Dummy logger
 class MyLogger:
     def debug(self, msg): pass
     def warning(self, msg): pass
@@ -28,8 +31,9 @@ class MyLogger:
 class DownloaderApp(App):
     def build(self):
         self.title = "YT-DLP Downloader Pro"
+        self.ffmpeg_error_msg = "" # Error message store karne ke liye
         
-        # FFmpeg Setup (Looks for ffmpeg.bin instead of ffmpeg.so)
+        # FFmpeg Setup aur Execution Test
         self.ffmpeg_path = self.setup_ffmpeg()
         
         root_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
@@ -178,32 +182,53 @@ class DownloaderApp(App):
         
         root_scroll.add_widget(content_layout)
         
-        # Startup Checker: Agar FFmpeg successfully detect ho gaya to status badal jayega
+        # Final Verification on UI (If test passed)
         if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
-            self.status_label.text = "Status: Ready (FFmpeg Active ✅)"
+            self.status_label.text = "Status: Ready (FFmpeg Active)"
         else:
-            self.status_label.text = "Status: Warning - FFmpeg NOT detected! ⚠️\n(1080p/4K downloads may fail)"
+            # Agar fail hua to screen par exact error dikhayega
+            self.status_label.text = f"Status: Warning - FFmpeg NOT Active! ⚠️\nDetail: {self.ffmpeg_error_msg}"
         
         return root_scroll
 
-    # Updated to look for ffmpeg.bin
+    # System testing implementation
     def setup_ffmpeg(self):
         if platform == 'android':
             internal_dir = self.user_data_dir
             dest_path = os.path.join(internal_dir, 'ffmpeg')
             
-            # Agar file already private space mein copied hai to direct return karein
-            if os.path.exists(dest_path):
-                return dest_path
-                
+            # Copy binary if not exists
             src_path = os.path.join(os.path.dirname(__file__), 'ffmpeg.bin')
             if os.path.exists(src_path):
+                if not os.path.exists(dest_path) or os.path.getsize(dest_path) == 0:
+                    try:
+                        shutil.copy(src_path, dest_path)
+                    except Exception as e:
+                        print(f"Copy error: {e}")
+            
+            # Force execution permissions every time app starts
+            if os.path.exists(dest_path):
                 try:
-                    shutil.copy(src_path, dest_path)
-                    os.chmod(dest_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-                    return dest_path
+                    os.chmod(dest_path, 0o755)
                 except Exception as e:
-                    print(f"FFmpeg copy error: {e}")
+                    print(f"Chmod error: {e}")
+                
+                # Verification Test: Background mein run karke check karna
+                try:
+                    process = subprocess.Popen([dest_path, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    stdout, stderr = process.communicate(timeout=2)
+                    if b"ffmpeg" in stdout or b"ffmpeg" in stderr:
+                        # Test Passed! Binary fully working hai
+                        return dest_path
+                    else:
+                        self.ffmpeg_error_msg = "Verification failed (output mismatch)"
+                except OSError as oe:
+                    # Permission denied (Code 13) ya Exec format error (Code 8) detect karega
+                    self.ffmpeg_error_msg = f"OS Error: {oe.strerror} (Code {oe.errno})"
+                except Exception as e:
+                    self.ffmpeg_error_msg = f"Runtime Error: {str(e)}"
+            else:
+                self.ffmpeg_error_msg = "ffmpeg.bin not found in assets"
             return None
         else:
             return None
@@ -231,11 +256,10 @@ class DownloaderApp(App):
     def clear_fields(self, instance):
         self.url_input.text = ""
         self.set_preview("YT-DLP Downloader Pro", "")
-        # Reset current status with diagnostic checks
         if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
-            self.update_status("Status: Ready (FFmpeg Active ✅)")
+            self.update_status("Status: Ready (FFmpeg Active)")
         else:
-            self.update_status("Status: Warning - FFmpeg NOT detected! ⚠️")
+            self.update_status(f"Status: Warning - FFmpeg NOT Active! ⚠️\nDetail: {self.ffmpeg_error_msg}")
 
     def start_fetch_thread(self, instance):
         url = self.url_input.text.strip()
@@ -277,7 +301,7 @@ class DownloaderApp(App):
             eta = d.get('_eta_str', 'N/A').strip()
             self.update_status(f"Progress: {percent}\nSpeed: {speed} | ETA: {eta}")
         elif d['status'] == 'finished':
-            self.update_status("Status: Merging Audio/Video with FFmpeg...")
+            self.update_status("Status: Merging Audio/Video with FFmpeg (Please wait)...")
 
     def start_download_thread(self, instance):
         url = self.url_input.text.strip()
@@ -313,10 +337,10 @@ class DownloaderApp(App):
                 'progress_hooks': [self.progress_hook]
             }
 
+            # CHANGE: yt-dlp ko binary file ke bajay uski containing directory ka path pass kiya gaya hai (highly stable)
             if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
-                ydl_opts['ffmpeg_location'] = self.ffmpeg_path
+                ydl_opts['ffmpeg_location'] = os.path.dirname(self.ffmpeg_path)
 
-            # Format options with merge capabilities
             q_choice = self.quality_spinner.text
             if "4K" in q_choice:
                 ydl_opts['format'] = 'bestvideo[height<=2160]+bestaudio/best[height<=2160]'
