@@ -11,14 +11,13 @@ package.domain = org.test
 # (str) Source code directory
 source.dir = .
 
-# (list) Source files to include (so extension must be included for ffmpeg.so)
-source.include_exts = py,png,jpg,kv,atlas,so
+# (list) Source files to include (so extension replaced with bin)
+source.include_exts = py,png,jpg,kv,atlas,bin
 
 # (str) Application versioning
 version = 1.0
 
 # (list) Application requirements
-# Python core + UI + downloader dependencies + android bridge (pyjnius)
 requirements = python3, kivy, yt-dlp, openssl, certifi, urllib3, pyjnius
 
 # (str) Supported orientations
@@ -34,13 +33,13 @@ fullscreen = 0
 # (list) Android permissions
 android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 
-# (int) Target Android API (API 33 is modern and stable)
+# (int) Target Android API
 android.api = 33
 
 # (int) Minimum API supported (Android 5.0+)
 android.minapi = 21
 
-# (bool) Private storage (keeps app internal files private)
+# (bool) Private storage
 android.private_storage = True
 
 # (bool) Copy library (.so) instead of loading directly (Recommended for Kivy)
