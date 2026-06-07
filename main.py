@@ -1,9 +1,7 @@
 import os
 import sys
-import shutil
-import stat
 import threading
-import subprocess # Test execution ke liye
+import subprocess # Direct native execution test ke liye
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.scrollview import ScrollView
@@ -17,12 +15,10 @@ from kivy.core.clipboard import Clipboard
 from kivy.utils import platform
 from kivy.clock import mainthread
 
-# Console bypass stream
 class SafeStream:
     def write(self, data): pass
     def flush(self): pass
 
-# Dummy logger
 class MyLogger:
     def debug(self, msg): pass
     def warning(self, msg): pass
@@ -31,9 +27,9 @@ class MyLogger:
 class DownloaderApp(App):
     def build(self):
         self.title = "YT-DLP Downloader Pro"
-        self.ffmpeg_error_msg = "" # Error message store karne ke liye
+        self.ffmpeg_error_msg = ""
         
-        # FFmpeg Setup aur Execution Test
+        # Native FFmpeg Folder Detection and Test
         self.ffmpeg_path = self.setup_ffmpeg()
         
         root_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
@@ -182,53 +178,45 @@ class DownloaderApp(App):
         
         root_scroll.add_widget(content_layout)
         
-        # Final Verification on UI (If test passed)
+        # Verification checking
         if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
-            self.status_label.text = "Status: Ready (FFmpeg Active)"
+            self.status_label.text = "Status: Ready (FFmpeg Active ✅)"
         else:
-            # Agar fail hua to screen par exact error dikhayega
             self.status_label.text = f"Status: Warning - FFmpeg NOT Active! ⚠️\nDetail: {self.ffmpeg_error_msg}"
         
         return root_scroll
 
-    # System testing implementation
+    # System library search and direct execution test (Bypasses Android 10+ Restrictions)
     def setup_ffmpeg(self):
         if platform == 'android':
-            internal_dir = self.user_data_dir
-            dest_path = os.path.join(internal_dir, 'ffmpeg')
-            
-            # Copy binary if not exists
-            src_path = os.path.join(os.path.dirname(__file__), 'ffmpeg.bin')
-            if os.path.exists(src_path):
-                if not os.path.exists(dest_path) or os.path.getsize(dest_path) == 0:
-                    try:
-                        shutil.copy(src_path, dest_path)
-                    except Exception as e:
-                        print(f"Copy error: {e}")
-            
-            # Force execution permissions every time app starts
-            if os.path.exists(dest_path):
-                try:
-                    os.chmod(dest_path, 0o755)
-                except Exception as e:
-                    print(f"Chmod error: {e}")
+            try:
+                from jnius import autoclass
+                # PythonActivity se system native library directory ka path nikalna
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                context = PythonActivity.mActivity.getApplicationContext()
+                lib_dir = context.getApplicationInfo().nativeLibraryDir
                 
-                # Verification Test: Background mein run karke check karna
-                try:
-                    process = subprocess.Popen([dest_path, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    stdout, stderr = process.communicate(timeout=2)
-                    if b"ffmpeg" in stdout or b"ffmpeg" in stderr:
-                        # Test Passed! Binary fully working hai
-                        return dest_path
-                    else:
-                        self.ffmpeg_error_msg = "Verification failed (output mismatch)"
-                except OSError as oe:
-                    # Permission denied (Code 13) ya Exec format error (Code 8) detect karega
-                    self.ffmpeg_error_msg = f"OS Error: {oe.strerror} (Code {oe.errno})"
-                except Exception as e:
-                    self.ffmpeg_error_msg = f"Runtime Error: {str(e)}"
-            else:
-                self.ffmpeg_error_msg = "ffmpeg.bin not found in assets"
+                # lib_dir ke andar hamari libffmpeg.so system dwara extracted milti hai
+                dest_path = os.path.join(lib_dir, 'libffmpeg.so')
+                
+                if os.path.exists(dest_path):
+                    # Verification Test: Direct execute karke check karna
+                    try:
+                        process = subprocess.Popen([dest_path, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        stdout, stderr = process.communicate(timeout=2)
+                        if b"ffmpeg" in stdout or b"ffmpeg" in stderr:
+                            # Test Passed! Binary working hai bina copy kiye
+                            return dest_path
+                        else:
+                            self.ffmpeg_error_msg = "Verification failed in native lib"
+                    except OSError as oe:
+                        self.ffmpeg_error_msg = f"Native Exec Error: {oe.strerror} (Code {oe.errno})"
+                    except Exception as e:
+                        self.ffmpeg_error_msg = f"Native Test Error: {str(e)}"
+                else:
+                    self.ffmpeg_error_msg = "libffmpeg.so not found in nativeLibraryDir"
+            except Exception as e:
+                self.ffmpeg_error_msg = f"Jnius Native Directory Error: {str(e)}"
             return None
         else:
             return None
@@ -257,7 +245,7 @@ class DownloaderApp(App):
         self.url_input.text = ""
         self.set_preview("YT-DLP Downloader Pro", "")
         if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
-            self.update_status("Status: Ready (FFmpeg Active)")
+            self.update_status("Status: Ready (FFmpeg Active ✅)")
         else:
             self.update_status(f"Status: Warning - FFmpeg NOT Active! ⚠️\nDetail: {self.ffmpeg_error_msg}")
 
@@ -337,8 +325,8 @@ class DownloaderApp(App):
                 'progress_hooks': [self.progress_hook]
             }
 
-            # CHANGE: yt-dlp ko binary file ke bajay uski containing directory ka path pass kiya gaya hai (highly stable)
             if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
+                # yt-dlp ko directory path dena zaroori hai
                 ydl_opts['ffmpeg_location'] = os.path.dirname(self.ffmpeg_path)
 
             q_choice = self.quality_spinner.text
