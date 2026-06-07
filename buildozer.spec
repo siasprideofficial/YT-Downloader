@@ -11,8 +11,8 @@ package.domain = org.test
 # (str) Source code directory
 source.dir = .
 
-# (list) Source files to include (so extension replaced with bin)
-source.include_exts = py,png,jpg,kv,atlas,bin
+# (list) Source files to include (using so extension)
+source.include_exts = py,png,jpg,kv,atlas,so
 
 # (str) Application versioning
 version = 1.0
